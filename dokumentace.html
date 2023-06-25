@@ -1,0 +1,415 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- 2023-06-10 So 13:06 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Arduino UNO lock</title>
+<meta name="author" content="Jan Novotný" />
+<meta name="generator" content="Org Mode" />
+<link rel="stylesheet" type="text/css" href="https://fniessen.github.io/org-html-themes/src/readtheorg_theme/css/htmlize.css"/>
+<link rel="stylesheet" type="text/css" href="https://fniessen.github.io/org-html-themes/src/readtheorg_theme/css/readtheorg.css"/>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="https://fniessen.github.io/org-html-themes/src/lib/js/jquery.stickytableheaders.min.js"></script>
+<script type="text/javascript" src="https://fniessen.github.io/org-html-themes/src/readtheorg_theme/js/readtheorg.js"></script>
+</head>
+<body>
+<div id="content" class="content">
+<h1 class="title">Arduino UNO lock</h1>
+<div id="table-of-contents" role="doc-toc">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents" role="doc-toc">
+<ul>
+<li><a href="#org01bfa2e">1. Zapojení</a></li>
+<li><a href="#orgf52036a">2. Použití</a>
+<ul>
+<li><a href="#org61f55c3">2.1. První zapnutí</a></li>
+<li><a href="#orgf371df9">2.2. Ovládání zámku</a></li>
+<li><a href="#org9d50b7d">2.3. Ovládání v menu</a></li>
+<li><a href="#org130f1aa">2.4. Funkce menu</a>
+<ul>
+<li><a href="#org047331c">2.4.1. Add PIN</a></li>
+<li><a href="#orgd407538">2.4.2. Remove PIN</a></li>
+<li><a href="#org2806948">2.4.3. Timeout Mode</a></li>
+<li><a href="#orgd032172">2.4.4. Set Timeout</a></li>
+<li><a href="#org4ebf232">2.4.5. Set PIN Len</a></li>
+<li><a href="#org6749c53">2.4.6. Clear PINs</a></li>
+<li><a href="#orge37aede">2.4.7. Set Try Limit</a></li>
+<li><a href="#orgb84f558">2.4.8. Fail Timeout</a></li>
+</ul>
+</li>
+<li><a href="#orgd213460">2.5. Reset zámku</a></li>
+</ul>
+</li>
+<li><a href="#org16baa9d">3. Implementace</a>
+<ul>
+<li><a href="#orgeecf9b8">3.1. Ukládání do EEPROM</a></li>
+<li><a href="#org713e840">3.2. Rozhraní pro programování</a>
+<ul>
+<li><a href="#org192783a">3.2.1. Knihovny</a></li>
+<li><a href="#orgf29111b">3.2.2. Stav zámku</a></li>
+<li><a href="#orgdb6d5a5">3.2.3. Šifrování</a></li>
+<li><a href="#org763d915">3.2.4. Velikost I2C LCD</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+<a href="https://wokwi.com/projects/366324823702289409">Projekt ve Wokwi</a>
+</p>
+
+
+<div id="org398d1b7" class="figure">
+<p><img src="./setup.png" alt="setup.png" />
+</p>
+</div>
+
+<div id="outline-container-org01bfa2e" class="outline-2">
+<h2 id="org01bfa2e"><span class="section-number-2">1.</span> Zapojení</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+Schéma zapojení pro Wokwi ve formátu <code>json</code> je dostupné v souboru <code>diagram.json</code>.
+</p>
+
+<p>
+Potřebné součástky
+</p>
+<ul class="org-ul">
+<li>Arduino UNO</li>
+<li>16x02 LCD I2C
+<ul class="org-ul">
+<li><code>GND -&gt; GND, SDA -&gt; A4, SCL -&gt; A5, VCC -&gt; 3.5V</code></li>
+</ul></li>
+<li>Keypad 4x4
+<ul class="org-ul">
+<li><code>piny 2-9</code></li>
+</ul></li>
+<li>Relay modul
+<ul class="org-ul">
+<li><code>IN -&gt; pin 13, GND-&gt;GND, VCC -&gt; 5V</code></li>
+</ul></li>
+<li>Tlačítko
+<ul class="org-ul">
+<li><code>pin 10 a GND</code></li>
+</ul></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgf52036a" class="outline-2">
+<h2 id="orgf52036a"><span class="section-number-2">2.</span> Použití</h2>
+<div class="outline-text-2" id="text-2">
+</div>
+<div id="outline-container-org61f55c3" class="outline-3">
+<h3 id="org61f55c3"><span class="section-number-3">2.1.</span> První zapnutí</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+Při prvním zapnutí je nejdřív nutné přidat první PIN, poté se otevře menu ve kterém je možné dál upravit konfiguraci.
+</p>
+
+
+<div id="orge76c314" class="figure">
+<p><img src="./pin.png" alt="pin.png" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgf371df9" class="outline-3">
+<h3 id="orgf371df9"><span class="section-number-3">2.2.</span> Ovládání zámku</h3>
+<div class="outline-text-3" id="text-2-2">
+<ul class="org-ul">
+<li><code>Cl</code> - vyčistí zadaný vstup</li>
+<li><code>En</code> - potvrzuje zadaný vstup</li>
+<li><code>0-9</code> zadá číslo</li>
+<li>Ve stavu odemčení je možné otevřít menu klávesou <code>#</code></li>
+</ul>
+
+
+<div id="org335cd4a" class="figure">
+<p><img src="./image.png" alt="image.png" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org9d50b7d" class="outline-3">
+<h3 id="org9d50b7d"><span class="section-number-3">2.3.</span> Ovládání v menu</h3>
+<div class="outline-text-3" id="text-2-3">
+<ul class="org-ul">
+<li><code>En</code> - potvrdit volbu</li>
+<li><code>*</code> - uzamknout</li>
+<li>šipky pro navigaci v menu</li>
+<li>menu je možné scrollovat</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org130f1aa" class="outline-3">
+<h3 id="org130f1aa"><span class="section-number-3">2.4.</span> Funkce menu</h3>
+<div class="outline-text-3" id="text-2-4">
+</div>
+<div id="outline-container-org047331c" class="outline-4">
+<h4 id="org047331c"><span class="section-number-4">2.4.1.</span> Add PIN</h4>
+<div class="outline-text-4" id="text-2-4-1">
+<p>
+Tato funkce umožňuje přidat další PIN pro ověření.
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgd407538" class="outline-4">
+<h4 id="orgd407538"><span class="section-number-4">2.4.2.</span> Remove PIN</h4>
+<div class="outline-text-4" id="text-2-4-2">
+<p>
+Tato funkce umožňuje odstranit PIN
+</p>
+</div>
+</div>
+
+<div id="outline-container-org2806948" class="outline-4">
+<h4 id="org2806948"><span class="section-number-4">2.4.3.</span> Timeout Mode</h4>
+<div class="outline-text-4" id="text-2-4-3">
+<p>
+Přepíná režim uzamčení.
+</p>
+
+<ul class="org-ul">
+<li><code>timeout: on</code> - po odemčení začne odpočet, po kterém se zámek znovu uzamkne.</li>
+<li><code>timeout: off</code> - po odemčení zůstane zámek odemčený dokud není ručně znovu uzamknut.</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgd032172" class="outline-4">
+<h4 id="orgd032172"><span class="section-number-4">2.4.4.</span> Set Timeout</h4>
+<div class="outline-text-4" id="text-2-4-4">
+<p>
+Nastavuje dobu v sekundách, po kterou zůstane zámek odemčený.
+</p>
+
+<p>
+<b>Není potřeba vyplnit všechna pole na čísla.</b>
+</p>
+</div>
+</div>
+
+<div id="outline-container-org4ebf232" class="outline-4">
+<h4 id="org4ebf232"><span class="section-number-4">2.4.5.</span> Set PIN Len</h4>
+<div class="outline-text-4" id="text-2-4-5">
+<p>
+Umožňuje zvolit jinou délku PINu. <b>Vybrání této možnosti automaticky odstraní všechny předchozí PINy a spustí volbu nového.</b>
+</p>
+</div>
+</div>
+
+<div id="outline-container-org6749c53" class="outline-4">
+<h4 id="org6749c53"><span class="section-number-4">2.4.6.</span> Clear PINs</h4>
+<div class="outline-text-4" id="text-2-4-6">
+<p>
+Vyčistí všechny PINy, po použití je třeba přidat alespoň jeden nový PIN.
+</p>
+</div>
+</div>
+
+<div id="outline-container-orge37aede" class="outline-4">
+<h4 id="orge37aede"><span class="section-number-4">2.4.7.</span> Set Try Limit</h4>
+<div class="outline-text-4" id="text-2-4-7">
+<p>
+Nastavuje počet pokusů před dočasným uzamčením. Nastavením na nulu je počet neomezený.
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgb84f558" class="outline-4">
+<h4 id="orgb84f558"><span class="section-number-4">2.4.8.</span> Fail Timeout</h4>
+<div class="outline-text-4" id="text-2-4-8">
+<p>
+Nastavuje dobu v sekundách po kterou bude zámek dočasně uzamčený, je-li funkce aktivována.
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgd213460" class="outline-3">
+<h3 id="orgd213460"><span class="section-number-3">2.5.</span> Reset zámku</h3>
+<div class="outline-text-3" id="text-2-5">
+<p>
+V případě potřeby je možné zámek vrátit do původního nastavení tlačítkem (připojené na pinu 10).
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org16baa9d" class="outline-2">
+<h2 id="org16baa9d"><span class="section-number-2">3.</span> Implementace</h2>
+<div class="outline-text-2" id="text-3">
+</div>
+<div id="outline-container-orgeecf9b8" class="outline-3">
+<h3 id="orgeecf9b8"><span class="section-number-3">3.1.</span> Ukládání do EEPROM</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+Zámek automaticky ukládá svůj stav do EEPROM paměti, ze které ho při resetu opět načte. Paměť se automaticky vyčistí při úplném resetu pomocí tlačítka.
+</p>
+
+<p>
+K uložení je používána funkce <code>EEPROM.put()</code>, nemělo by tedy docházet k přepisování paměti pokud hodnoty nebyly změněny.
+Aby program zjistil zda je v paměti uložen stav zámku, přečte <code>32</code> bitů začínající z indexu <code>512</code>. Pokud se hodnota přečteného <code>uint32_t</code> rovná <code>32</code>, přečte následující paměť jako stav zámku.
+</p>
+</div>
+</div>
+
+<div id="outline-container-org713e840" class="outline-3">
+<h3 id="org713e840"><span class="section-number-3">3.2.</span> Rozhraní pro programování</h3>
+<div class="outline-text-3" id="text-3-2">
+</div>
+<div id="outline-container-org192783a" class="outline-4">
+<h4 id="org192783a"><span class="section-number-4">3.2.1.</span> Knihovny</h4>
+<div class="outline-text-4" id="text-3-2-1">
+<p>
+Všechny potřebné knihovny jsou dostupné jak na Wokwi, tak v Arduino IDE.
+</p>
+
+<ul class="org-ul">
+<li><a href="https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library">LiquidCrystal I2C</a></li>
+<li><a href="https://github.com/Chris--A/Keypad">Keypad</a></li>
+<li><a href="https://gitlab.com/atesin/XxHash_arduino">XxHash​_arduino</a></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgf29111b" class="outline-4">
+<h4 id="orgf29111b"><span class="section-number-4">3.2.2.</span> Stav zámku</h4>
+<div class="outline-text-4" id="text-3-2-2">
+<p>
+Stav zámku je kompletně uložen ve struktuře <code>state</code>, jejíž definice vypadá takto
+</p>
+
+<div class="org-src-container">
+<pre class="src src-C"><span style="color: #0000FF;">struct</span> <span style="color: #6434A3;">state</span> <span style="color: #707183; background-color: #FFFFFF;">{</span>
+  <span style="color: #006FE0;">uint32_t</span> <span style="color: #BA36A5; font-style: italic;">_magic</span><span style="color: #333333; background-color: #FFFFFF;">;</span>    <span style="color: #8D8D84; font-style: italic;">// special magic number, stored for some fancy tricks!</span>
+  <span style="color: #6434A3;">byte</span> <span style="color: #BA36A5; font-style: italic;">pin_len</span><span style="color: #333333; background-color: #FFFFFF;">;</span>       <span style="color: #8D8D84; font-style: italic;">// Length of PIN code</span>
+  <span style="color: #6434A3;">byte</span> <span style="color: #BA36A5; font-style: italic;">pass_index</span><span style="color: #333333; background-color: #FFFFFF;">;</span>    <span style="color: #8D8D84; font-style: italic;">// number of filled passwords</span>
+  <span style="color: #6434A3;">byte</span> <span style="color: #BA36A5; font-style: italic;">cursor_index</span><span style="color: #333333; background-color: #FFFFFF;">;</span>  <span style="color: #8D8D84; font-style: italic;">// cursor position on input, also the index in the menu</span>
+  <span style="color: #006FE0;">bool</span> <span style="color: #BA36A5; font-style: italic;">wait</span><span style="color: #333333; background-color: #FFFFFF;">;</span>          <span style="color: #8D8D84; font-style: italic;">// timeout bool, will lock after set time if true</span>
+  <span style="color: #0000FF;">enum</span> <span style="color: #6434A3;">states</span> <span style="color: #BA36A5; font-style: italic;">state</span><span style="color: #333333; background-color: #FFFFFF;">;</span>  <span style="color: #8D8D84; font-style: italic;">// lock state</span>
+  <span style="color: #006FE0;">long</span> <span style="color: #BA36A5; font-style: italic;">timer</span><span style="color: #333333; background-color: #FFFFFF;">;</span>         <span style="color: #8D8D84; font-style: italic;">// used for timers</span>
+  <span style="color: #006FE0;">long</span> <span style="color: #BA36A5; font-style: italic;">wait_ms</span><span style="color: #333333; background-color: #FFFFFF;">;</span>       <span style="color: #8D8D84; font-style: italic;">// time to wait before re-locking</span>
+  <span style="color: #0000FF;">enum</span> <span style="color: #6434A3;">menu_states</span> <span style="color: #BA36A5; font-style: italic;">menu_state</span><span style="color: #333333; background-color: #FFFFFF;">;</span> <span style="color: #8D8D84; font-style: italic;">// menu state selection</span>
+  <span style="color: #006FE0;">char</span> <span style="color: #D0372D; font-style: italic;">passwords</span><span style="color: #7388D6; background-color: #FFFFFF;">[</span><span style="color: #D0372D;">PASS_LIMIT</span><span style="color: #7388D6; background-color: #FFFFFF;">][</span><span style="color: #D0372D;">HASH_SIZE</span><span style="color: #7388D6; background-color: #FFFFFF;">]</span><span style="color: #333333; background-color: #FFFFFF;">;</span> <span style="color: #8D8D84; font-style: italic;">// valid password array</span>
+  <span style="color: #006FE0;">bool</span> <span style="color: #BA36A5; font-style: italic;">redraw</span><span style="color: #333333; background-color: #FFFFFF;">;</span> <span style="color: #8D8D84; font-style: italic;">// used to force a menu redraw, might not be necessary</span>
+  <span style="color: #6434A3;">byte</span> <span style="color: #BA36A5; font-style: italic;">failed</span><span style="color: #333333; background-color: #FFFFFF;">;</span> <span style="color: #8D8D84; font-style: italic;">// counts failed PIN attempts</span>
+  <span style="color: #6434A3;">byte</span> <span style="color: #BA36A5; font-style: italic;">failed_max</span><span style="color: #333333; background-color: #FFFFFF;">;</span> <span style="color: #8D8D84; font-style: italic;">// failed attempts before timeout</span>
+  <span style="color: #006FE0;">long</span> <span style="color: #BA36A5; font-style: italic;">failed_wait_ms</span><span style="color: #333333; background-color: #FFFFFF;">;</span> <span style="color: #8D8D84; font-style: italic;">// time to wait after x failed attempts</span>
+  <span style="color: #006FE0;">bool</span> <span style="color: #BA36A5; font-style: italic;">failed_check</span><span style="color: #333333; background-color: #FFFFFF;">;</span> <span style="color: #8D8D84; font-style: italic;">// enable or disable login timeouts</span>
+  <span style="color: #006FE0;">char</span><span style="color: #0000FF;">*</span> <span style="color: #BA36A5; font-style: italic;">guess</span><span style="color: #333333; background-color: #FFFFFF;">;</span> <span style="color: #8D8D84; font-style: italic;">// user's current input, usually a guess</span>
+<span style="color: #707183; background-color: #FFFFFF;">}</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+</pre>
+</div>
+
+<p>
+Nejpodstatnějsí informace o aktuálním stavu jsou uložené v proměnných <code>(enum states)state</code> a <code>(enum menu_states)menu_state</code>.
+</p>
+
+<p>
+Ty jsou definovány následovně:
+</p>
+<div class="org-src-container">
+<pre class="src src-C"><span style="color: #0000FF;">enum</span> <span style="color: #6434A3;">states</span> <span style="color: #707183; background-color: #FFFFFF;">{</span><span style="color: #BA36A5;">initial</span><span style="color: #333333; background-color: #FFFFFF;">,</span> <span style="color: #BA36A5;">locked</span><span style="color: #333333; background-color: #FFFFFF;">,</span> <span style="color: #BA36A5;">unlocked</span><span style="color: #333333; background-color: #FFFFFF;">,</span> <span style="color: #BA36A5;">menu</span><span style="color: #333333; background-color: #FFFFFF;">,</span> <span style="color: #BA36A5;">timeout</span><span style="color: #707183; background-color: #FFFFFF;">}</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+
+<span style="color: #8D8D84; font-style: italic;">// Different menu states</span>
+<span style="color: #0000FF;">enum</span> <span style="color: #6434A3;">menu_states</span> <span style="color: #707183; background-color: #FFFFFF;">{</span><span style="color: #BA36A5;">main</span><span style="color: #333333; background-color: #FFFFFF;">,</span> 
+                 <span style="color: #BA36A5;">add_pin</span><span style="color: #333333; background-color: #FFFFFF;">,</span> 
+                 <span style="color: #BA36A5;">remove_pin</span><span style="color: #333333; background-color: #FFFFFF;">,</span>
+                 <span style="color: #BA36A5;">timeout_toggle</span><span style="color: #333333; background-color: #FFFFFF;">,</span>
+                 <span style="color: #BA36A5;">set_timeout</span><span style="color: #333333; background-color: #FFFFFF;">,</span> 
+                 <span style="color: #BA36A5;">set_pin_len</span><span style="color: #333333; background-color: #FFFFFF;">,</span> 
+                 <span style="color: #BA36A5;">clear_pins</span><span style="color: #333333; background-color: #FFFFFF;">,</span> 
+                 <span style="color: #BA36A5;">set_fail_limit</span><span style="color: #333333; background-color: #FFFFFF;">,</span> 
+                 <span style="color: #BA36A5;">set_fail_timeout</span><span style="color: #707183; background-color: #FFFFFF;">}</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+</pre>
+</div>
+
+<p>
+Samotné stavy jsou pak přepínány pomocí speciálních funkcí uvnitř funkce <code>loop()</code>:
+</p>
+
+<p>
+<code>switch_state(struct state* state, enum states s, byte digits = 0)</code>
+</p>
+
+<p>
+<code>void switch_menu_state(struct state* state, enum menu_states s, byte digits = 0)</code>
+</p>
+
+<p>
+Jednoduchá definice stavu pak může vypadat například takto:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-C"><span style="color: #006FE0;">void</span> <span style="color: #006699;">loop</span><span style="color: #707183; background-color: #FFFFFF;">()</span> <span style="color: #707183; background-color: #FFFFFF;">{</span>
+
+  <span style="color: #0000FF;">if</span> <span style="color: #7388D6; background-color: #FFFFFF;">(</span>state<span style="color: #0000FF;">-&gt;</span><span style="color: #D0372D; font-style: italic;">state</span> <span style="color: #0000FF;">==</span> locked<span style="color: #7388D6; background-color: #FFFFFF;">)</span> <span style="color: #0000FF;">...</span>
+
+  <span style="color: #8D8D84; font-style: italic;">// * Login timeout state * ----------------------------------------</span>
+  <span style="color: #0000FF;">else</span> <span style="color: #0000FF;">if</span> <span style="color: #7388D6; background-color: #FFFFFF;">(</span>state<span style="color: #0000FF;">-&gt;</span><span style="color: #D0372D; font-style: italic;">state</span> <span style="color: #0000FF;">==</span> timeout<span style="color: #7388D6; background-color: #FFFFFF;">)</span> <span style="color: #7388D6; background-color: #FFFFFF;">{</span>
+        <span style="color: #006DAF;">lcd_center</span><span style="color: #909183; background-color: #FFFFFF;">(</span><span style="color: #008000;">"locked"</span><span style="color: #333333; background-color: #FFFFFF;">,</span> lcd_rows<span style="color: #0000FF;">/</span><span style="color: #D0372D;">2</span><span style="color: #0000FF;">-</span><span style="color: #D0372D;">1</span><span style="color: #909183; background-color: #FFFFFF;">)</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+        <span style="color: #0000FF;">static</span> <span style="color: #006FE0;">char</span><span style="color: #0000FF;">*</span> <span style="color: #BA36A5;">t_str</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+        <span style="color: #BA36A5;">t_str</span> <span style="color: #0000FF;">=</span> <span style="color: #006DAF;">make_countdown_str</span><span style="color: #909183; background-color: #FFFFFF;">(</span>state<span style="color: #909183; background-color: #FFFFFF;">)</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+
+        <span style="color: #006DAF;">lcd_center</span><span style="color: #909183; background-color: #FFFFFF;">(</span>t_str<span style="color: #333333; background-color: #FFFFFF;">,</span> lcd_rows<span style="color: #0000FF;">/</span><span style="color: #D0372D;">2</span><span style="color: #909183; background-color: #FFFFFF;">)</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+
+        <span style="color: #0000FF;">if</span> <span style="color: #909183; background-color: #FFFFFF;">(</span><span style="color: #006DAF;">timer_done</span><span style="color: #709870; background-color: #FFFFFF;">(</span>state<span style="color: #709870; background-color: #FFFFFF;">)</span><span style="color: #909183; background-color: #FFFFFF;">)</span> <span style="color: #909183; background-color: #FFFFFF;">{</span>
+          state<span style="color: #0000FF;">-&gt;</span><span style="color: #BA36A5; font-style: italic;">failed</span> <span style="color: #0000FF;">=</span> <span style="color: #D0372D;">0</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+          <span style="color: #006DAF;">switch_state</span><span style="color: #709870; background-color: #FFFFFF;">(</span>state<span style="color: #333333; background-color: #FFFFFF;">,</span> locked<span style="color: #709870; background-color: #FFFFFF;">)</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+          <span style="color: #0000FF;">return</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+        <span style="color: #909183; background-color: #FFFFFF;">}</span>
+      <span style="color: #7388D6; background-color: #FFFFFF;">}</span>
+  <span style="color: #8D8D84; font-style: italic;">// ----------------------------------------------------------------</span>
+
+  <span style="color: #0000FF;">...</span>
+<span style="color: #707183; background-color: #FFFFFF;">}</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgdb6d5a5" class="outline-4">
+<h4 id="orgdb6d5a5"><span class="section-number-4">3.2.3.</span> Šifrování</h4>
+<div class="outline-text-4" id="text-3-2-3">
+<p>
+Hesla jsou v paměti Arduina i v EEPROM šifrována jako 32bitový hash původního řetězce pomocí knihovny <code>XxHash_arduino</code>.
+</p>
+</div>
+</div>
+
+<div id="outline-container-org763d915" class="outline-4">
+<h4 id="org763d915"><span class="section-number-4">3.2.4.</span> Velikost I2C LCD</h4>
+<div class="outline-text-4" id="text-3-2-4">
+<p>
+Je možné použít LCD o jiných rozměrech, v takové situaci je ale potřeba upravit deklaraci proměnných.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-C"><span style="color: #0000FF;">const</span> <span style="color: #6434A3;">byte</span> <span style="color: #BA36A5;">lcd_cols</span>          <span style="color: #0000FF;">=</span> <span style="color: #D0372D;">16</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+<span style="color: #0000FF;">const</span> <span style="color: #6434A3;">byte</span> <span style="color: #BA36A5;">lcd_rows</span>          <span style="color: #0000FF;">=</span> <span style="color: #D0372D;">2</span><span style="color: #333333; background-color: #FFFFFF;">;</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Jan Novotný</p>
+<p class="date">Created: 2023-06-10 So 13:06</p>
+<p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>

@@ -1,0 +1,178 @@
+#+TITLE: Arduino UNO lock
+#+AUTHOR: Jan Novotný
+#+SETUPFILE: https://fniessen.github.io/org-html-themes/org/theme-readtheorg.setup
+
+[[https://wokwi.com/projects/366324823702289409][Projekt ve Wokwi]]
+
+[[./setup.png]]
+
+* Zapojení
+Schéma zapojení pro Wokwi ve formátu ~json~ je dostupné v souboru ~diagram.json~.
+
+Potřebné součástky
+- Arduino UNO
+- 16x02 LCD I2C
+  - ~GND -> GND, SDA -> A4, SCL -> A5, VCC -> 3.5V~
+- Keypad 4x4
+  - ~piny 2-9~
+- Relay modul
+  - ~IN -> pin 13, GND->GND, VCC -> 5V~
+- Tlačítko
+  - ~pin 10 a GND~
+
+* Použití
+
+** První zapnutí
+Při prvním zapnutí je nejdřív nutné přidat první PIN, poté se otevře menu ve kterém je možné dál upravit konfiguraci.
+
+[[./pin.png]]
+
+** Ovládání zámku
+- ~Cl~ - vyčistí zadaný vstup
+- ~En~ - potvrzuje zadaný vstup
+- ~0-9~ zadá číslo
+- Ve stavu odemčení je možné otevřít menu klávesou ~#~
+
+[[./image.png]]
+  
+** Ovládání v menu
+- ~En~ - potvrdit volbu
+- ~*~ - uzamknout
+- šipky pro navigaci v menu
+- menu je možné scrollovat
+
+** Funkce menu
+
+*** Add PIN
+Tato funkce umožňuje přidat další PIN pro ověření.
+
+*** Remove PIN
+Tato funkce umožňuje odstranit PIN
+
+*** Timeout Mode
+Přepíná režim uzamčení.
+
+- ~timeout: on~ - po odemčení začne odpočet, po kterém se zámek znovu uzamkne.
+- ~timeout: off~ - po odemčení zůstane zámek odemčený dokud není ručně znovu uzamknut.
+
+*** Set Timeout
+Nastavuje dobu v sekundách, po kterou zůstane zámek odemčený.
+
+*Není potřeba vyplnit všechna pole na čísla.*
+
+*** Set PIN Len
+Umožňuje zvolit jinou délku PINu. *Vybrání této možnosti automaticky odstraní všechny předchozí PINy a spustí volbu nového.*
+
+*** Clear PINs
+Vyčistí všechny PINy, po použití je třeba přidat alespoň jeden nový PIN.
+
+*** Set Try Limit
+Nastavuje počet pokusů před dočasným uzamčením. Nastavením na nulu je počet neomezený.
+
+*** Fail Timeout
+Nastavuje dobu v sekundách po kterou bude zámek dočasně uzamčený, je-li funkce aktivována.
+
+** Reset zámku
+V případě potřeby je možné zámek vrátit do původního nastavení tlačítkem (připojené na pinu 10).
+
+* Implementace
+
+** Ukládání do EEPROM
+Zámek automaticky ukládá svůj stav do EEPROM paměti, ze které ho při resetu opět načte. Paměť se automaticky vyčistí při úplném resetu pomocí tlačítka.
+
+K uložení je používána funkce ~EEPROM.put()~, nemělo by tedy docházet k přepisování paměti pokud hodnoty nebyly změněny.
+Aby program zjistil zda je v paměti uložen stav zámku, přečte ~32~ bitů začínající z indexu ~512~. Pokud se hodnota přečteného ~uint32_t~ rovná ~32~, přečte následující paměť jako stav zámku.
+
+** Rozhraní pro programování
+*** Knihovny
+Všechny potřebné knihovny jsou dostupné jak na Wokwi, tak v Arduino IDE.
+
+- [[https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library][LiquidCrystal I2C]]
+- [[https://github.com/Chris--A/Keypad][Keypad]]
+- [[https://gitlab.com/atesin/XxHash_arduino][XxHash​_arduino]]
+
+*** Stav zámku
+Stav zámku je kompletně uložen ve struktuře ~state~, jejíž definice vypadá takto
+
+#+begin_src C
+  struct state {
+    uint32_t _magic;    // special magic number, stored for some fancy tricks!
+    byte pin_len;       // Length of PIN code
+    byte pass_index;    // number of filled passwords
+    byte cursor_index;  // cursor position on input, also the index in the menu
+    bool wait;          // timeout bool, will lock after set time if true
+    enum states state;  // lock state
+    long timer;         // used for timers
+    long wait_ms;       // time to wait before re-locking
+    enum menu_states menu_state; // menu state selection
+    char passwords[PASS_LIMIT][HASH_SIZE]; // valid password array
+    bool redraw; // used to force a menu redraw, might not be necessary
+    byte failed; // counts failed PIN attempts
+    byte failed_max; // failed attempts before timeout
+    long failed_wait_ms; // time to wait after x failed attempts
+    bool failed_check; // enable or disable login timeouts
+    char* guess; // user's current input, usually a guess
+  };
+#+end_src
+
+Nejpodstatnějsí informace o aktuálním stavu jsou uložené v proměnných ~(enum states)state~ a ~(enum menu_states)menu_state~.
+
+Ty jsou definovány následovně:
+#+begin_src C
+  enum states {initial, locked, unlocked, menu, timeout};
+
+  // Different menu states
+  enum menu_states {main, 
+		   add_pin, 
+		   remove_pin,
+		   timeout_toggle,
+		   set_timeout, 
+		   set_pin_len, 
+		   clear_pins, 
+		   set_fail_limit, 
+		   set_fail_timeout};
+#+end_src
+
+Samotné stavy jsou pak přepínány pomocí speciálních funkcí uvnitř funkce ~loop()~:
+
+~switch_state(struct state* state, enum states s, byte digits = 0)~
+
+~void switch_menu_state(struct state* state, enum menu_states s, byte digits = 0)~
+
+Jednoduchá definice stavu pak může vypadat například takto:
+
+#+begin_src C
+  void loop() {
+
+    if (state->state == locked) ...
+
+    // * Login timeout state * ----------------------------------------
+    else if (state->state == timeout) {
+	  lcd_center("locked", lcd_rows/2-1);
+	  static char* t_str;
+	  t_str = make_countdown_str(state);
+
+	  lcd_center(t_str, lcd_rows/2);
+
+	  if (timer_done(state)) {
+	    state->failed = 0;
+	    switch_state(state, locked);
+	    return;
+	  }
+	}
+    // ----------------------------------------------------------------
+
+    ...
+  }
+#+end_src
+
+*** Šifrování
+Hesla jsou v paměti Arduina i v EEPROM šifrována jako 32bitový hash původního řetězce pomocí knihovny ~XxHash_arduino~.
+
+*** Velikost I2C LCD
+Je možné použít LCD o jiných rozměrech, v takové situaci je ale potřeba upravit deklaraci proměnných.
+
+#+begin_src C
+  const byte lcd_cols          = 16;
+  const byte lcd_rows          = 2;
+#+end_src
